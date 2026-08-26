@@ -394,6 +394,11 @@ func runServe(options serveOptions) error {
 		MFAProviders:               buildMFAProviders(c.MFA.Authenticators, c.Issuer, logger),
 		DefaultMFAChain:            c.MFA.DefaultMFAChain,
 	}
+	if c.OAuth2.DynamicClientRegistration.Enabled {
+		serverConfig.DynamicClientRegistration = &server.DynamicClientRegistrationConfig{
+			InitialAccessToken: c.OAuth2.DynamicClientRegistration.InitialAccessToken,
+		}
+	}
 
 	if c.Expiry.AuthRequests != "" {
 		authRequests, err := time.ParseDuration(c.Expiry.AuthRequests)
