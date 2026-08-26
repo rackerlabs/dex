@@ -36,6 +36,7 @@ var clientCredentialsScopePolicy = ScopePolicy{
 	Rejected: map[string]string{
 		tokens.ScopeOfflineAccess: "client_credentials grant does not support offline_access scope.",
 		tokens.ScopeFederatedID:   "client_credentials grant does not support federated:id scope.",
+		tokens.ScopeIDRACPrivs:    "client_credentials grant does not support idrac_privs scope.",
 	},
 	ErrorType: oauth2.InvalidScope,
 }

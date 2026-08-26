@@ -3,11 +3,13 @@ package tokens
 import (
 	"crypto/rand"
 	"crypto/rsa"
+	"encoding/json"
 	"log/slog"
 	"net/url"
 	"testing"
 	"time"
 
+	jose "github.com/go-jose/go-jose/v4"
 	"github.com/stretchr/testify/require"
 
 	"github.com/dexidp/dex/server/internal"
@@ -73,4 +75,39 @@ func TestIssuerIssue(t *testing.T) {
 	require.NotEmpty(t, ts2.AccessToken)
 	require.NotEmpty(t, ts2.IDToken)
 	require.Empty(t, ts2.RefreshToken)
+}
+
+func TestIDRACPrivilegesClaim(t *testing.T) {
+	ctx := t.Context()
+	iss, _ := newTestIssuer(t)
+
+	readClaims := func(t *testing.T, scopes []string) *IDRACPrivileges {
+		t.Helper()
+		raw, _, err := iss.SignIDToken(ctx, Authorization{
+			Client:      storage.Client{ID: "idrac"},
+			Claims:      storage.Claims{UserID: "u1"},
+			Scopes:      scopes,
+			ConnectorID: "mock",
+		}, "", "")
+		require.NoError(t, err)
+
+		keys, err := iss.signer.ValidationKeys(ctx)
+		require.NoError(t, err)
+		require.NotEmpty(t, keys)
+		jws, err := jose.ParseSigned(raw, []jose.SignatureAlgorithm{jose.RS256})
+		require.NoError(t, err)
+		payload, err := jws.Verify(keys[0])
+		require.NoError(t, err)
+		var claims struct {
+			IDRACPrivileges *IDRACPrivileges `json:"xidp,omitempty"`
+		}
+		require.NoError(t, json.Unmarshal(payload, &claims))
+		return claims.IDRACPrivileges
+	}
+
+	withScope := readClaims(t, []string{ScopeOpenID, ScopeIDRACPrivs})
+	require.Equal(t, &IDRACPrivileges{All: []string{"L", "TA", "SC", "AR", "VM", "DC"}}, withScope)
+
+	withoutScope := readClaims(t, []string{ScopeOpenID})
+	require.Nil(t, withoutScope)
 }

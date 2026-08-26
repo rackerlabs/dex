@@ -36,6 +36,7 @@ var passwordScopePolicy = ScopePolicy{
 		tokens.ScopeProfile:       true,
 		tokens.ScopeGroups:        true,
 		tokens.ScopeFederatedID:   true,
+		tokens.ScopeIDRACPrivs:    true,
 	},
 	RequireOpenID: true,
 	ErrorType:     oauth2.InvalidRequest,
