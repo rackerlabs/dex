@@ -64,6 +64,7 @@ func TestHandleDiscovery(t *testing.T) {
 			"profile",
 			"offline_access",
 			"federated:id",
+			"idrac_privs",
 		},
 		AuthMethods: []string{
 			"client_secret_basic",
@@ -84,6 +85,7 @@ func TestHandleDiscovery(t *testing.T) {
 			"at_hash",
 			"groups",
 			"federated_claims",
+			"xidp",
 		},
 	}, res)
 }

@@ -15,6 +15,7 @@ const (
 	ScopeEmail         = "email"
 	ScopeProfile       = "profile"
 	ScopeFederatedID   = "federated:id"
+	ScopeIDRACPrivs    = "idrac_privs"
 
 	scopeCrossClientPrefix = "audience:server:client_id:"
 )

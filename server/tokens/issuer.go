@@ -156,6 +156,10 @@ func (i *Issuer) SignIDToken(ctx context.Context, auth Authorization, accessToke
 				ConnectorID: auth.ConnectorID,
 				UserID:      auth.Claims.UserID,
 			}
+		case scope == ScopeIDRACPrivs:
+			tok.IDRACPrivileges = &IDRACPrivileges{
+				All: []string{"L", "TA", "SC", "AR", "VM", "DC"},
+			}
 		default:
 			peerID, ok := ParseCrossClientScope(scope)
 			if !ok {

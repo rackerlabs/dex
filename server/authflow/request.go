@@ -310,7 +310,7 @@ func (h *Handler) parseAuthorizationRequest(r *http.Request) (*storage.AuthReque
 		switch scope {
 		case tokens.ScopeOpenID:
 			hasOpenIDScope = true
-		case tokens.ScopeOfflineAccess, tokens.ScopeEmail, tokens.ScopeProfile, tokens.ScopeGroups, tokens.ScopeFederatedID:
+		case tokens.ScopeOfflineAccess, tokens.ScopeEmail, tokens.ScopeProfile, tokens.ScopeGroups, tokens.ScopeFederatedID, tokens.ScopeIDRACPrivs:
 		default:
 			peerID, ok := tokens.ParseCrossClientScope(scope)
 			if !ok {

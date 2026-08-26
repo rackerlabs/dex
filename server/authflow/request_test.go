@@ -48,7 +48,7 @@ func TestParseAuthorizationRequest(t *testing.T) {
 				"client_id":     "foo",
 				"redirect_uri":  "https://example.com/foo",
 				"response_type": "code",
-				"scope":         "openid email profile",
+				"scope":         "openid email profile idrac_privs",
 			},
 		},
 		{

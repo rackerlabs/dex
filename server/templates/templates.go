@@ -271,7 +271,8 @@ var scopeDescriptions = map[string]string{
 	"email":          "View your email address",
 	// 'groups' is not a standard OIDC scope, and Dex only returns groups only if the upstream provider does too.
 	// This warning is added for convenience to show that the user may expose some sensitive data to the application.
-	"groups": "View your groups",
+	"groups":      "View your groups",
+	"idrac_privs": "Receive Dell iDRAC privileges",
 }
 
 type ConnectorInfo struct {

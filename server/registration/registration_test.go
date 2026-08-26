@@ -58,7 +58,7 @@ func TestRegisterConfidentialClient(t *testing.T) {
 	rr := registrationRequest(t, h, http.MethodPost, "bearer initial-access-token", Request{
 		RedirectURIs: []string{"https://idrac.example.com/oauth2/callback"},
 		ClientName:   "iDRAC",
-		Scope:        "openid profile",
+		Scope:        "openid profile idrac_privs",
 	})
 	require.Equal(t, http.StatusCreated, rr.Code, rr.Body.String())
 	require.Equal(t, "no-store", rr.Header().Get("Cache-Control"))
@@ -86,7 +86,7 @@ func TestRegisterConfidentialClient(t *testing.T) {
 		DynamicallyRegistered:   true,
 		GrantTypes:              []string{oauth2.GrantTypeAuthorizationCode},
 		ResponseTypes:           []string{oauth2.ResponseTypeCode},
-		AllowedScopes:           []string{"openid", "profile"},
+		AllowedScopes:           []string{"openid", "profile", "idrac_privs"},
 		TokenEndpointAuthMethod: "client_secret_basic",
 		RegistrationTime:        1_700_000_000,
 		RegistrationTokenID:     "sha256:e1f064d6f227d4de",
@@ -143,7 +143,7 @@ func TestRegisterRejectsInvalidMetadata(t *testing.T) {
 		{"inconsistent grant and response", Request{RedirectURIs: []string{"https://example.com/callback"}, GrantTypes: []string{oauth2.GrantTypeRefreshToken}, ResponseTypes: []string{oauth2.ResponseTypeCode}}, errorInvalidClientMetadata},
 		{"cross-origin logo", Request{RedirectURIs: []string{"https://example.com/callback"}, LogoURI: "https://attacker.example/logo.svg"}, errorInvalidClientMetadata},
 		{"duplicate scope", Request{RedirectURIs: []string{"https://example.com/callback"}, Scope: "openid openid"}, errorInvalidClientMetadata},
-		{"unsupported scope", Request{RedirectURIs: []string{"https://example.com/callback"}, Scope: "openid idrac_privs"}, errorInvalidClientMetadata},
+		{"unsupported scope", Request{RedirectURIs: []string{"https://example.com/callback"}, Scope: "openid unknown"}, errorInvalidClientMetadata},
 		{"offline access without refresh grant", Request{RedirectURIs: []string{"https://example.com/callback"}, Scope: "openid offline_access"}, errorInvalidClientMetadata},
 	}
 

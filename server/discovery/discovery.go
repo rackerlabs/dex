@@ -145,12 +145,12 @@ func (h *Handler) Construct(ctx context.Context) Document {
 		Subjects:          []string{"public"},
 		IDTokenAlgs:       []string{string(jose.RS256)},
 		CodeChallengeAlgs: h.PKCEMethods,
-		Scopes:            []string{"openid", "email", "groups", "profile", "offline_access", "federated:id"},
+		Scopes:            []string{"openid", "email", "groups", "profile", "offline_access", "federated:id", "idrac_privs"},
 		AuthMethods:       []string{"client_secret_basic", "client_secret_post", "none"},
 		Claims: []string{
 			"iss", "sub", "aud", "iat", "exp", "email", "email_verified",
 			"locale", "name", "preferred_username", "at_hash", "groups",
-			"federated_claims",
+			"federated_claims", "xidp",
 		},
 	}
 	if h.RegistrationEnabled {
