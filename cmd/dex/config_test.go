@@ -122,6 +122,9 @@ oauth2:
   grantTypes:
   - refresh_token
   - "urn:ietf:params:oauth:grant-type:token-exchange"
+  dynamicClientRegistration:
+    enabled: true
+    initialAccessToken: idrac-registration-token
 
 connectors:
 - type: mockCallback
@@ -217,6 +220,10 @@ additionalFeatures: [
 			GrantTypes: []string{
 				"refresh_token",
 				"urn:ietf:params:oauth:grant-type:token-exchange",
+			},
+			DynamicClientRegistration: DynamicClientRegistration{
+				Enabled:            true,
+				InitialAccessToken: "idrac-registration-token",
 			},
 		},
 		StaticConnectors: []Connector{

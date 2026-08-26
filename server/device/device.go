@@ -162,6 +162,25 @@ func (h *Handler) parseDeviceCodeRequest(r *http.Request) (deviceCodeRequest, *d
 // the authorization response the device polls against.
 func (h *Handler) createDeviceAuthorization(ctx context.Context, req deviceCodeRequest) (*DeviceCodeResponse, *deviceFlowError) {
 	h.Logger.InfoContext(ctx, "received device request", "client_id", req.clientID, "scoped", req.scopes)
+	client, err := h.Storage.GetClient(ctx, req.clientID)
+	switch {
+	case errors.Is(err, storage.ErrNotFound):
+		// Unknown clients are validated later in the flow.
+	case err != nil:
+		// Fail closed rather than skip the registration policy silently.
+		h.Logger.ErrorContext(ctx, "failed to load client for device authorization", "client_id", req.clientID, "err", err)
+		return nil, &deviceFlowError{status: http.StatusInternalServerError, code: oauth2.ServerError, message: "Failed to load client."}
+	case client.DynamicallyRegistered:
+		if subtle.ConstantTimeCompare([]byte(client.Secret), []byte(req.clientSecret)) != 1 {
+			return nil, &deviceFlowError{status: http.StatusUnauthorized, code: oauth2.InvalidClient, message: "Invalid client credentials."}
+		}
+		if !client.AllowsGrantType(oauth2.GrantTypeDeviceCode) {
+			return nil, &deviceFlowError{status: http.StatusBadRequest, code: oauth2.UnauthorizedClient, message: "Client did not register the device grant type."}
+		}
+		if !client.AllowsScopes(req.scopes) {
+			return nil, &deviceFlowError{status: http.StatusBadRequest, code: oauth2.InvalidScope, message: "Client did not register all requested scopes."}
+		}
+	}
 
 	deviceCode := storage.NewDeviceCode()
 	userCode := storage.NewUserCode()

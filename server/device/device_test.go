@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dexidp/dex/server/oauth2"
+	"github.com/dexidp/dex/storage"
 	"github.com/dexidp/dex/storage/memory"
 )
 
@@ -39,6 +40,7 @@ func TestCreateDeviceAuthorizationUsesInjectedClock(t *testing.T) {
 		Now:              func() time.Time { return fixed },
 		RequestsValidFor: 5 * time.Minute,
 	}
+	require.NoError(t, h.Storage.CreateClient(t.Context(), storage.Client{ID: "test"}))
 
 	resp, ferr := h.createDeviceAuthorization(t.Context(), deviceCodeRequest{
 		clientID: "test",
@@ -56,4 +58,33 @@ func TestCreateDeviceAuthorizationUsesInjectedClock(t *testing.T) {
 	require.NoError(t, err)
 	require.WithinDuration(t, want, token.Expiry, 0)
 	require.WithinDuration(t, fixed, token.LastRequestTime, 0)
+}
+
+func TestCreateDeviceAuthorizationEnforcesDynamicClientPolicy(t *testing.T) {
+	u, err := url.Parse("https://dex.example.com")
+	require.NoError(t, err)
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	h := &Handler{
+		IssuerURL: oauth2.IssuerURL{URL: *u}, Storage: memory.New(logger), Logger: logger,
+		Now: time.Now, RequestsValidFor: 5 * time.Minute,
+	}
+	client := storage.Client{
+		ID: "dynamic", Secret: "secret", DynamicallyRegistered: true,
+		GrantTypes: []string{oauth2.GrantTypeAuthorizationCode}, AllowedScopes: []string{"openid"},
+	}
+	require.NoError(t, h.Storage.CreateClient(t.Context(), client))
+
+	_, ferr := h.createDeviceAuthorization(t.Context(), deviceCodeRequest{clientID: client.ID, clientSecret: client.Secret, scopes: []string{"openid"}})
+	require.NotNil(t, ferr)
+	require.Equal(t, oauth2.UnauthorizedClient, ferr.code)
+
+	client.GrantTypes = []string{oauth2.GrantTypeDeviceCode}
+	require.NoError(t, h.Storage.UpdateClient(t.Context(), client.ID, func(storage.Client) (storage.Client, error) { return client, nil }))
+	_, ferr = h.createDeviceAuthorization(t.Context(), deviceCodeRequest{clientID: client.ID, clientSecret: "wrong", scopes: []string{"openid"}})
+	require.NotNil(t, ferr)
+	require.Equal(t, oauth2.InvalidClient, ferr.code)
+
+	_, ferr = h.createDeviceAuthorization(t.Context(), deviceCodeRequest{clientID: client.ID, clientSecret: client.Secret, scopes: []string{"openid", "email"}})
+	require.NotNil(t, ferr)
+	require.Equal(t, oauth2.InvalidScope, ferr.code)
 }

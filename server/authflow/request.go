@@ -222,6 +222,12 @@ func (h *Handler) parseAuthorizationRequest(r *http.Request) (*storage.AuthReque
 	newredirectedAuthErr := func(typ, format string, a ...interface{}) *redirectedAuthErr {
 		return &redirectedAuthErr{state, redirectURI, typ, fmt.Sprintf(format, a...)}
 	}
+	if !client.AllowsScopes(scopes) {
+		return nil, "", newredirectedAuthErr(oauth2.InvalidScope, "Client did not register all requested scopes.")
+	}
+	if !client.AllowsResponseType(responseTypes) {
+		return nil, "", newredirectedAuthErr(oauth2.UnauthorizedClient, "Client did not register the requested response type.")
+	}
 
 	if connectorID != "" {
 		connectors, err := h.Storage.ListConnectors(ctx)

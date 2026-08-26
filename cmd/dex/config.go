@@ -109,6 +109,7 @@ func (c Config) Validate() error {
 		{c.GRPC.TLSMinVersion != "" && c.GRPC.TLSMinVersion != "1.2" && c.GRPC.TLSMinVersion != "1.3", "supported TLS versions are: 1.2, 1.3"},
 		{c.GRPC.TLSMaxVersion != "" && c.GRPC.TLSMaxVersion != "1.2" && c.GRPC.TLSMaxVersion != "1.3", "supported TLS versions are: 1.2, 1.3"},
 		{c.GRPC.TLSMaxVersion != "" && c.GRPC.TLSMinVersion != "" && c.GRPC.TLSMinVersion > c.GRPC.TLSMaxVersion, "TLSMinVersion greater than TLSMaxVersion"},
+		{c.OAuth2.DynamicClientRegistration.Enabled && c.OAuth2.DynamicClientRegistration.InitialAccessToken == "", "dynamic client registration requires an initial access token"},
 	}
 
 	var checkErrors []string
@@ -252,6 +253,15 @@ type OAuth2 struct {
 	PasswordConnector string `json:"passwordConnector"`
 	// PKCE configuration
 	PKCE PKCE `json:"pkce"`
+	// DynamicClientRegistration controls the protected RFC 7591 endpoint.
+	DynamicClientRegistration DynamicClientRegistration `json:"dynamicClientRegistration"`
+}
+
+// DynamicClientRegistration is disabled by default. When enabled, clients
+// must authenticate with InitialAccessToken.
+type DynamicClientRegistration struct {
+	Enabled            bool   `json:"enabled"`
+	InitialAccessToken string `json:"initialAccessToken"`
 }
 
 // PKCE holds the PKCE (Proof Key for Code Exchange) configuration.

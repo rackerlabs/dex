@@ -52,6 +52,32 @@ func TestParseAuthorizationRequest(t *testing.T) {
 			},
 		},
 		{
+			name: "dynamic client rejects unregistered scope",
+			clients: []storage.Client{{
+				ID: "dynamic", RedirectURIs: []string{"https://example.com/callback"},
+				DynamicallyRegistered: true, ResponseTypes: []string{"code"}, AllowedScopes: []string{"openid", "profile"},
+			}},
+			supportedResponseTypes: []string{"code"},
+			queryParams: map[string]string{
+				"client_id": "dynamic", "redirect_uri": "https://example.com/callback",
+				"response_type": "code", "scope": "openid email",
+			},
+			expectedError: &redirectedAuthErr{Type: oauth2.InvalidScope},
+		},
+		{
+			name: "dynamic client rejects unregistered response type",
+			clients: []storage.Client{{
+				ID: "dynamic", RedirectURIs: []string{"https://example.com/callback"},
+				DynamicallyRegistered: true, ResponseTypes: []string{"code"}, AllowedScopes: []string{"openid"},
+			}},
+			supportedResponseTypes: []string{"code", "id_token"},
+			queryParams: map[string]string{
+				"client_id": "dynamic", "redirect_uri": "https://example.com/callback",
+				"response_type": "id_token", "scope": "openid", "nonce": "nonce",
+			},
+			expectedError: &redirectedAuthErr{Type: oauth2.UnauthorizedClient},
+		},
+		{
 			name: "POST request",
 			clients: []storage.Client{
 				{
