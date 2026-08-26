@@ -88,6 +88,7 @@ type IDTokenClaims struct {
 	PreferredUsername string `json:"preferred_username,omitempty"`
 
 	FederatedIDClaims *FederatedIDClaims `json:"federated_claims,omitempty"`
+	IDRACPrivileges   *IDRACPrivileges   `json:"xidp,omitempty"`
 }
 
 // FederatedIDClaims carries the upstream connector's identity for the
@@ -95,6 +96,13 @@ type IDTokenClaims struct {
 type FederatedIDClaims struct {
 	ConnectorID string `json:"connector_id,omitempty"`
 	UserID      string `json:"user_id,omitempty"`
+}
+
+// IDRACPrivileges is the privilege map expected by Dell iDRAC OIDC clients.
+// The JSON key is deliberately "*": it grants the listed privileges across
+// all managed resources.
+type IDRACPrivileges struct {
+	All []string `json:"*"`
 }
 
 // GetClientID resolves the requesting client from an audience and azp: the single

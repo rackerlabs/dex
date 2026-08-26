@@ -315,7 +315,7 @@ func (h *Handler) normalizeAndValidate(req *Request) (string, string) {
 	}
 	seenScopes := make(map[string]struct{})
 	for _, scope := range strings.Fields(req.Scope) {
-		if !slices.Contains([]string{tokens.ScopeOpenID, tokens.ScopeOfflineAccess, tokens.ScopeEmail, tokens.ScopeProfile, tokens.ScopeGroups, tokens.ScopeFederatedID}, scope) {
+		if !slices.Contains([]string{tokens.ScopeOpenID, tokens.ScopeOfflineAccess, tokens.ScopeEmail, tokens.ScopeProfile, tokens.ScopeGroups, tokens.ScopeFederatedID, tokens.ScopeIDRACPrivs}, scope) {
 			return errorInvalidClientMetadata, fmt.Sprintf("unsupported scope %q", scope)
 		}
 		if _, duplicate := seenScopes[scope]; duplicate {

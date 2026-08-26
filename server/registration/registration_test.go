@@ -58,7 +58,7 @@ func TestRegisterConfidentialClient(t *testing.T) {
 	rr := registrationRequest(t, h, http.MethodPost, "bearer initial-access-token", Request{
 		RedirectURIs: []string{"https://client.example.com/oauth2/callback"},
 		ClientName:   "Example Client",
-		Scope:        "openid profile",
+		Scope:        "openid profile idrac_privs",
 	})
 	require.Equal(t, http.StatusCreated, rr.Code, rr.Body.String())
 	require.Equal(t, "no-store", rr.Header().Get("Cache-Control"))
@@ -86,7 +86,7 @@ func TestRegisterConfidentialClient(t *testing.T) {
 		DynamicallyRegistered:   true,
 		GrantTypes:              []string{oauth2.GrantTypeAuthorizationCode},
 		ResponseTypes:           []string{oauth2.ResponseTypeCode},
-		AllowedScopes:           []string{"openid", "profile"},
+		AllowedScopes:           []string{"openid", "profile", "idrac_privs"},
 		TokenEndpointAuthMethod: "client_secret_basic",
 		RegistrationTime:        1_700_000_000,
 		RegistrationTokenID:     "sha256:e1f064d6f227d4de",
