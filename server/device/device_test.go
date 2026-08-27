@@ -3,7 +3,10 @@ package device
 import (
 	"io"
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -71,20 +74,58 @@ func TestCreateDeviceAuthorizationEnforcesDynamicClientPolicy(t *testing.T) {
 	client := storage.Client{
 		ID: "dynamic", Secret: "secret", DynamicallyRegistered: true,
 		GrantTypes: []string{oauth2.GrantTypeAuthorizationCode}, AllowedScopes: []string{"openid"},
+		TokenEndpointAuthMethod: "client_secret_post",
 	}
 	require.NoError(t, h.Storage.CreateClient(t.Context(), client))
 
-	_, ferr := h.createDeviceAuthorization(t.Context(), deviceCodeRequest{clientID: client.ID, clientSecret: client.Secret, scopes: []string{"openid"}})
+	_, ferr := h.createDeviceAuthorization(t.Context(), deviceCodeRequest{clientID: client.ID, clientSecret: client.Secret, clientAuthMethod: "client_secret_post", scopes: []string{"openid"}})
 	require.NotNil(t, ferr)
 	require.Equal(t, oauth2.UnauthorizedClient, ferr.code)
 
 	client.GrantTypes = []string{oauth2.GrantTypeDeviceCode}
 	require.NoError(t, h.Storage.UpdateClient(t.Context(), client.ID, func(storage.Client) (storage.Client, error) { return client, nil }))
-	_, ferr = h.createDeviceAuthorization(t.Context(), deviceCodeRequest{clientID: client.ID, clientSecret: "wrong", scopes: []string{"openid"}})
+	_, ferr = h.createDeviceAuthorization(t.Context(), deviceCodeRequest{clientID: client.ID, clientSecret: "wrong", clientAuthMethod: "client_secret_post", scopes: []string{"openid"}})
 	require.NotNil(t, ferr)
 	require.Equal(t, oauth2.InvalidClient, ferr.code)
 
-	_, ferr = h.createDeviceAuthorization(t.Context(), deviceCodeRequest{clientID: client.ID, clientSecret: client.Secret, scopes: []string{"openid", "email"}})
+	_, ferr = h.createDeviceAuthorization(t.Context(), deviceCodeRequest{clientID: client.ID, clientSecret: client.Secret, clientAuthMethod: "client_secret_post", scopes: []string{"openid", "email"}})
 	require.NotNil(t, ferr)
 	require.Equal(t, oauth2.InvalidScope, ferr.code)
+
+	_, ferr = h.createDeviceAuthorization(t.Context(), deviceCodeRequest{clientID: client.ID, clientSecret: client.Secret, clientAuthMethod: "client_secret_basic", scopes: []string{"openid"}})
+	require.NotNil(t, ferr)
+	require.Equal(t, oauth2.InvalidClient, ferr.code)
+
+	client.TokenEndpointAuthMethod = "client_secret_basic"
+	require.NoError(t, h.Storage.UpdateClient(t.Context(), client.ID, func(storage.Client) (storage.Client, error) { return client, nil }))
+	_, ferr = h.createDeviceAuthorization(t.Context(), deviceCodeRequest{clientID: client.ID, clientSecret: client.Secret, clientAuthMethod: "client_secret_basic", scopes: []string{"openid"}})
+	require.Nil(t, ferr)
+}
+
+func TestParseDeviceCodeRequestClientAuthenticationMethod(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	h := &Handler{Logger: logger}
+
+	form := url.Values{"client_id": {"post-client"}, "client_secret": {"post-secret"}}
+	req := httptest.NewRequest(http.MethodPost, "/device/code", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	parsed, ferr := h.parseDeviceCodeRequest(req)
+	require.Nil(t, ferr)
+	require.Equal(t, "client_secret_post", parsed.clientAuthMethod)
+	require.Equal(t, "post-client", parsed.clientID)
+
+	req = httptest.NewRequest(http.MethodPost, "/device/code", nil)
+	req.SetBasicAuth(url.QueryEscape("basic client"), url.QueryEscape("basic secret"))
+	parsed, ferr = h.parseDeviceCodeRequest(req)
+	require.Nil(t, ferr)
+	require.Equal(t, "client_secret_basic", parsed.clientAuthMethod)
+	require.Equal(t, "basic client", parsed.clientID)
+	require.Equal(t, "basic secret", parsed.clientSecret)
+
+	form = url.Values{"client_id": {"public-client"}}
+	req = httptest.NewRequest(http.MethodPost, "/device/code", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	parsed, ferr = h.parseDeviceCodeRequest(req)
+	require.Nil(t, ferr)
+	require.Equal(t, "none", parsed.clientAuthMethod)
 }

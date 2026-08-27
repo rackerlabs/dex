@@ -160,14 +160,38 @@ func TestRegisterRejectsInvalidMetadata(t *testing.T) {
 
 func TestRegisterAcceptsCompoundResponseType(t *testing.T) {
 	h := testHandler()
+	h.GrantTypes = append(h.GrantTypes, oauth2.GrantTypeImplicit)
 	h.ResponseTypes[oauth2.ResponseTypeIDToken] = true
 
 	rr := registrationRequest(t, h, http.MethodPost, "Bearer initial-access-token", Request{
 		RedirectURIs:  []string{"https://example.com/callback"},
-		GrantTypes:    []string{oauth2.GrantTypeAuthorizationCode},
+		GrantTypes:    []string{oauth2.GrantTypeAuthorizationCode, oauth2.GrantTypeImplicit},
 		ResponseTypes: []string{"code id_token"},
 	})
 	require.Equal(t, http.StatusCreated, rr.Code, rr.Body.String())
+}
+
+func TestRegisterRejectsInconsistentImplicitMetadata(t *testing.T) {
+	h := testHandler()
+	h.GrantTypes = append(h.GrantTypes, oauth2.GrantTypeImplicit)
+	h.ResponseTypes[oauth2.ResponseTypeIDToken] = true
+
+	for _, req := range []Request{
+		{
+			RedirectURIs:  []string{"https://example.com/callback"},
+			GrantTypes:    []string{oauth2.GrantTypeAuthorizationCode},
+			ResponseTypes: []string{"code id_token"},
+		},
+		{
+			RedirectURIs:  []string{"https://example.com/callback"},
+			GrantTypes:    []string{oauth2.GrantTypeAuthorizationCode, oauth2.GrantTypeImplicit},
+			ResponseTypes: []string{oauth2.ResponseTypeCode},
+		},
+	} {
+		rr := registrationRequest(t, h, http.MethodPost, "Bearer initial-access-token", req)
+		require.Equal(t, http.StatusBadRequest, rr.Code, rr.Body.String())
+		require.Contains(t, rr.Body.String(), errorInvalidClientMetadata)
+	}
 }
 
 func TestRegisterRequestValidation(t *testing.T) {

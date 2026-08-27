@@ -85,13 +85,20 @@ func (h *Handler) redirectWithError(w http.ResponseWriter, r *http.Request, auth
 	err.Handler().ServeHTTP(w, r)
 }
 
-func validateRedirectURI(client storage.Client, redirectURI string) bool {
+func validateRedirectURI(client storage.Client, redirectURI, deviceCallbackURI string) bool {
 	// Allow named RedirectURIs for both public and non-public clients.
 	// This is required to make PKCE-enabled web apps work when configured as public clients.
 	for _, uri := range client.RedirectURIs {
 		if redirectURI == uri {
 			return true
 		}
+	}
+	// The device callback belongs to Dex rather than the client. Dynamic device
+	// clients cannot register this issuer-relative URI through RFC 7591, so allow
+	// it only when the client registered the device grant and it exactly matches
+	// this server's callback path.
+	if client.DynamicallyRegistered && client.AllowsGrantType(oauth2.GrantTypeDeviceCode) && redirectURI == deviceCallbackURI {
+		return true
 	}
 	// For non-public clients or when RedirectURIs is set, we allow only explicitly named RedirectURIs.
 	if !client.Public || len(client.RedirectURIs) > 0 {
@@ -124,6 +131,26 @@ func isHostLocal(host string) bool {
 	}
 
 	return host == "localhost" || net.ParseIP(host).IsLoopback()
+}
+
+func isDeviceCallbackURI(raw string) bool {
+	u, err := url.Parse(raw)
+	return err == nil && !u.IsAbs() && u.Host == "" && strings.HasSuffix(u.Path, oauth2.DeviceCallbackURI)
+}
+
+func authorizationGrantTypes(redirectURI string, responseTypes []string) []string {
+	if isDeviceCallbackURI(redirectURI) {
+		return []string{oauth2.GrantTypeDeviceCode}
+	}
+
+	grantTypes := make([]string, 0, 2)
+	if slices.Contains(responseTypes, oauth2.ResponseTypeCode) {
+		grantTypes = append(grantTypes, oauth2.GrantTypeAuthorizationCode)
+	}
+	if slices.Contains(responseTypes, oauth2.ResponseTypeToken) || slices.Contains(responseTypes, oauth2.ResponseTypeIDToken) {
+		grantTypes = append(grantTypes, oauth2.GrantTypeImplicit)
+	}
+	return grantTypes
 }
 
 func validateConnectorID(connectors []storage.Connector, connectorID string) bool {
@@ -210,7 +237,7 @@ func (h *Handler) parseAuthorizationRequest(r *http.Request) (*storage.AuthReque
 		return nil, "", newDisplayedErr(http.StatusInternalServerError, "Database error.")
 	}
 
-	if !validateRedirectURI(client, redirectURI) {
+	if !validateRedirectURI(client, redirectURI, h.IssuerURL.AbsPath(oauth2.DeviceCallbackURI)) {
 		h.Logger.ErrorContext(ctx, "unregistered redirect_uri", "redirect_uri", redirectURI, "client_id", clientID)
 		return nil, "", newDisplayedErr(http.StatusBadRequest, "Unregistered redirect_uri.")
 	}
@@ -227,6 +254,11 @@ func (h *Handler) parseAuthorizationRequest(r *http.Request) (*storage.AuthReque
 	}
 	if !client.AllowsResponseType(responseTypes) {
 		return nil, "", newredirectedAuthErr(oauth2.UnauthorizedClient, "Client did not register the requested response type.")
+	}
+	for _, grantType := range authorizationGrantTypes(redirectURI, responseTypes) {
+		if !client.AllowsGrantType(grantType) {
+			return nil, "", newredirectedAuthErr(oauth2.UnauthorizedClient, "Client did not register the grant type required by the requested response type.")
+		}
 	}
 
 	if connectorID != "" {
@@ -253,7 +285,17 @@ func (h *Handler) parseAuthorizationRequest(r *http.Request) (*storage.AuthReque
 		return nil, "", newredirectedAuthErr(oauth2.InvalidRequest, "Unsupported PKCE challenge method (%q).", codeChallengeMethod)
 	}
 
-	// Enforce PKCE if configured.
+	// Public RFC 7591 clients cannot authenticate at the token endpoint, so bind
+	// every authorization code to an S256 verifier even when PKCE is optional for
+	// legacy clients.
+	dynamicPublicCodeFlow := client.DynamicallyRegistered && client.Public &&
+		slices.Contains(responseTypes, oauth2.ResponseTypeCode) &&
+		!isDeviceCallbackURI(redirectURI)
+	if dynamicPublicCodeFlow && (codeChallenge == "" || codeChallengeMethod != oauth2.PKCEMethodS256) {
+		return nil, "", newredirectedAuthErr(oauth2.InvalidRequest, "Public dynamically registered clients must use the S256 PKCE challenge method.")
+	}
+
+	// Enforce PKCE globally if configured.
 	// https://datatracker.ietf.org/doc/html/draft-ietf-oauth-v2-1-12#section-4.1.1
 	if h.PKCE.Enforce && codeChallenge == "" {
 		return nil, "", newredirectedAuthErr(oauth2.InvalidRequest, "PKCE is required. The code_challenge parameter must be provided.")

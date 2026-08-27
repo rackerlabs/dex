@@ -298,6 +298,11 @@ func (h *Handler) normalizeAndValidate(req *Request) (string, string) {
 	if hasCodeResponse != hasCodeGrant {
 		return errorInvalidClientMetadata, "authorization_code grant and code response type must be requested together"
 	}
+	hasImplicitResponse := responseTypesContain(req.ResponseTypes, oauth2.ResponseTypeToken) || responseTypesContain(req.ResponseTypes, oauth2.ResponseTypeIDToken)
+	hasImplicitGrant := slices.Contains(req.GrantTypes, oauth2.GrantTypeImplicit)
+	if hasImplicitResponse != hasImplicitGrant {
+		return errorInvalidClientMetadata, "implicit grant and token or id_token response type must be requested together"
+	}
 	if len(req.LogoURI) > maxLogoURIBytes {
 		return errorInvalidClientMetadata, "logo_uri is too long"
 	}

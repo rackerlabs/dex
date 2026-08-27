@@ -78,6 +78,63 @@ func TestParseAuthorizationRequest(t *testing.T) {
 			expectedError: &redirectedAuthErr{Type: oauth2.UnauthorizedClient},
 		},
 		{
+			name: "dynamic client rejects unregistered authorization code grant",
+			clients: []storage.Client{{
+				ID: "dynamic", RedirectURIs: []string{"https://example.com/callback"},
+				DynamicallyRegistered: true, GrantTypes: []string{oauth2.GrantTypeImplicit},
+				ResponseTypes: []string{"code"}, AllowedScopes: []string{"openid"},
+			}},
+			supportedResponseTypes: []string{"code"},
+			queryParams: map[string]string{
+				"client_id": "dynamic", "redirect_uri": "https://example.com/callback",
+				"response_type": "code", "scope": "openid",
+			},
+			expectedError: &redirectedAuthErr{Type: oauth2.UnauthorizedClient},
+		},
+		{
+			name: "dynamic public authorization code client requires PKCE",
+			clients: []storage.Client{{
+				ID: "dynamic", RedirectURIs: []string{"com.example.app:/callback"}, Public: true,
+				DynamicallyRegistered: true, GrantTypes: []string{oauth2.GrantTypeAuthorizationCode},
+				ResponseTypes: []string{"code"}, AllowedScopes: []string{"openid"},
+			}},
+			supportedResponseTypes: []string{"code"},
+			queryParams: map[string]string{
+				"client_id": "dynamic", "redirect_uri": "com.example.app:/callback",
+				"response_type": "code", "scope": "openid",
+			},
+			expectedError: &redirectedAuthErr{Type: oauth2.InvalidRequest},
+		},
+		{
+			name: "dynamic public authorization code client rejects plain PKCE",
+			clients: []storage.Client{{
+				ID: "dynamic", RedirectURIs: []string{"com.example.app:/callback"}, Public: true,
+				DynamicallyRegistered: true, GrantTypes: []string{oauth2.GrantTypeAuthorizationCode},
+				ResponseTypes: []string{"code"}, AllowedScopes: []string{"openid"},
+			}},
+			supportedResponseTypes: []string{"code"},
+			queryParams: map[string]string{
+				"client_id": "dynamic", "redirect_uri": "com.example.app:/callback",
+				"response_type": "code", "scope": "openid", "code_challenge": "challenge",
+				"code_challenge_method": oauth2.PKCEMethodPlain,
+			},
+			expectedError: &redirectedAuthErr{Type: oauth2.InvalidRequest},
+		},
+		{
+			name: "dynamic public authorization code client accepts S256 PKCE",
+			clients: []storage.Client{{
+				ID: "dynamic", RedirectURIs: []string{"com.example.app:/callback"}, Public: true,
+				DynamicallyRegistered: true, GrantTypes: []string{oauth2.GrantTypeAuthorizationCode},
+				ResponseTypes: []string{"code"}, AllowedScopes: []string{"openid"},
+			}},
+			supportedResponseTypes: []string{"code"},
+			queryParams: map[string]string{
+				"client_id": "dynamic", "redirect_uri": "com.example.app:/callback",
+				"response_type": "code", "scope": "openid", "code_challenge": "challenge",
+				"code_challenge_method": oauth2.PKCEMethodS256,
+			},
+		},
+		{
 			name: "POST request",
 			clients: []storage.Client{
 				{
@@ -601,6 +658,26 @@ func TestValidRedirectURI(t *testing.T) {
 			redirectURI: "http://localhost",
 			wantValid:   false,
 		},
+		// RFC 7591 device clients use Dex's issuer-relative callback without
+		// registering it as a client redirect URI.
+		{
+			client: storage.Client{
+				DynamicallyRegistered: true,
+				GrantTypes:            []string{oauth2.GrantTypeDeviceCode},
+				RedirectURIs:          []string{"https://client.example/callback"},
+			},
+			redirectURI: oauth2.DeviceCallbackURI,
+			wantValid:   true,
+		},
+		{
+			client: storage.Client{
+				DynamicallyRegistered: true,
+				GrantTypes:            []string{oauth2.GrantTypeAuthorizationCode},
+				RedirectURIs:          []string{"https://client.example/callback"},
+			},
+			redirectURI: oauth2.DeviceCallbackURI,
+			wantValid:   false,
+		},
 		// These special desktop + device + localhost URIs can still be specified explicitly.
 		{
 			client: storage.Client{
@@ -659,7 +736,7 @@ func TestValidRedirectURI(t *testing.T) {
 		},
 	}
 	for _, test := range tests {
-		got := validateRedirectURI(test.client, test.redirectURI)
+		got := validateRedirectURI(test.client, test.redirectURI, oauth2.DeviceCallbackURI)
 		if got != test.wantValid {
 			t.Errorf("client=%#v, redirectURI=%q, wanted valid=%t, got=%t",
 				test.client, test.redirectURI, test.wantValid, got)

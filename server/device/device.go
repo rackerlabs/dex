@@ -116,10 +116,11 @@ func (h *Handler) handleDeviceExchange(w http.ResponseWriter, r *http.Request) {
 
 // deviceCodeRequest is a parsed /device/code authorization request.
 type deviceCodeRequest struct {
-	clientID     string
-	clientSecret string
-	scopes       []string
-	pkce         storage.PKCE
+	clientID         string
+	clientSecret     string
+	clientAuthMethod string
+	scopes           []string
+	pkce             storage.PKCE
 }
 
 // parseDeviceCodeRequest parses and validates the /device/code form.
@@ -147,15 +148,30 @@ func (h *Handler) parseDeviceCodeRequest(r *http.Request) (deviceCodeRequest, *d
 		scopes = []string{"openid"}
 	}
 
-	return deviceCodeRequest{
-		clientID:     r.Form.Get("client_id"),
-		clientSecret: r.Form.Get("client_secret"),
-		scopes:       scopes,
-		pkce: storage.PKCE{
-			CodeChallenge:       r.Form.Get("code_challenge"),
-			CodeChallengeMethod: method,
-		},
-	}, nil
+	req := deviceCodeRequest{scopes: scopes}
+	if id, secret, ok := r.BasicAuth(); ok {
+		req.clientAuthMethod = "client_secret_basic"
+		var err error
+		if req.clientID, err = url.QueryUnescape(id); err != nil {
+			return deviceCodeRequest{}, &deviceFlowError{status: http.StatusBadRequest, code: oauth2.InvalidRequest, message: "client_id improperly encoded"}
+		}
+		if req.clientSecret, err = url.QueryUnescape(secret); err != nil {
+			return deviceCodeRequest{}, &deviceFlowError{status: http.StatusBadRequest, code: oauth2.InvalidRequest, message: "client_secret improperly encoded"}
+		}
+	} else {
+		req.clientID = r.Form.Get("client_id")
+		req.clientSecret = r.Form.Get("client_secret")
+		if req.clientSecret == "" {
+			req.clientAuthMethod = "none"
+		} else {
+			req.clientAuthMethod = "client_secret_post"
+		}
+	}
+	req.pkce = storage.PKCE{
+		CodeChallenge:       r.Form.Get("code_challenge"),
+		CodeChallengeMethod: method,
+	}
+	return req, nil
 }
 
 // createDeviceAuthorization mints and stores the device and user codes and builds
@@ -171,6 +187,9 @@ func (h *Handler) createDeviceAuthorization(ctx context.Context, req deviceCodeR
 		h.Logger.ErrorContext(ctx, "failed to load client for device authorization", "client_id", req.clientID, "err", err)
 		return nil, &deviceFlowError{status: http.StatusInternalServerError, code: oauth2.ServerError, message: "Failed to load client."}
 	case client.DynamicallyRegistered:
+		if client.TokenEndpointAuthMethod != req.clientAuthMethod {
+			return nil, &deviceFlowError{status: http.StatusUnauthorized, code: oauth2.InvalidClient, message: "Client authentication method does not match its registration."}
+		}
 		if subtle.ConstantTimeCompare([]byte(client.Secret), []byte(req.clientSecret)) != 1 {
 			return nil, &deviceFlowError{status: http.StatusUnauthorized, code: oauth2.InvalidClient, message: "Invalid client credentials."}
 		}
